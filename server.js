@@ -212,36 +212,36 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// GET /mgmt/licenses
-app.get("/mgmt/licenses", requireAdminKey, async (req, res) => {
+// GET /v1/licenses
+app.get("/v1/licenses", requireAdminKey, async (req, res) => {
   const rows = await db.listLicenses();
   res.json(rows);
 });
 
-// POST /mgmt/licenses  (also GET /mgmt/licenses/new?note=)
-app.post("/mgmt/licenses", requireAdminKey, async (req, res) => {
+// POST /v1/licenses  (also GET /v1/licenses/new?note=)
+app.post("/v1/licenses", requireAdminKey, async (req, res) => {
   const { note } = req.body || {};
   const key = await db.createLicense(note || null);
   res.json({ license_key: key });
 });
-app.get("/mgmt/licenses/new", requireAdminKey, async (req, res) => {
+app.get("/v1/licenses/new", requireAdminKey, async (req, res) => {
   const note = req.query.note || null;
   const key = await db.createLicense(note);
   res.json({ license_key: key });
 });
 
-// POST /mgmt/licenses/:key/revoke  (also GET)
-app.post("/mgmt/licenses/:key/revoke", requireAdminKey, async (req, res) => {
+// POST /v1/licenses/:key/revoke  (also GET)
+app.post("/v1/licenses/:key/revoke", requireAdminKey, async (req, res) => {
   await db.revokeLicense(req.params.key);
   res.json({ revoked: req.params.key });
 });
-app.get("/mgmt/licenses/:key/revoke", requireAdminKey, async (req, res) => {
+app.get("/v1/licenses/:key/revoke", requireAdminKey, async (req, res) => {
   await db.revokeLicense(req.params.key);
   res.json({ revoked: req.params.key });
 });
 
-// GET /mgmt/signals
-app.get("/mgmt/signals", requireAdminKey, async (req, res) => {
+// GET /v1/signals
+app.get("/v1/signals", requireAdminKey, async (req, res) => {
   const limit = parseInt(req.query.limit || "100");
   const rows = await db.recentSignals(limit);
   res.json(rows);
