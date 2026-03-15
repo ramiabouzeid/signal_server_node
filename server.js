@@ -178,26 +178,31 @@ async function handleSignal(req, res) {
   const sl = signals.find(s => s.action === "SL")?.price ?? null;
   const tp = signals.find(s => s.action === "TP")?.price ?? null;
 
-  const signalId = await db.storeSignal({
-    sp,
-    action:      first.action    || "UNKNOWN",
-    symbol:      first.symbol    ?? null,
-    price:       first.price     ?? null,
-    sl,
-    tp,
-    entry_low:   first.entry_low  ?? null,
-    entry_high:  first.entry_high ?? null,
-    raw:         formatted,
-  });
+  try {
+    const signalId = await db.storeSignal({
+      sp,
+      action:      first.action    || "UNKNOWN",
+      symbol:      first.symbol    ?? null,
+      price:       first.price     ?? null,
+      sl,
+      tp,
+      entry_low:   first.entry_low  ?? null,
+      entry_high:  first.entry_high ?? null,
+      raw:         formatted,
+    });
 
-  const payload = { sp, formatted, signals, signal_id: signalId };
-  const deliveredIds = broadcast(payload);
+    const payload = { sp, formatted, signals, signal_id: signalId };
+    const deliveredIds = broadcast(payload);
 
-  // Log delivery
-  await Promise.all(deliveredIds.map(cid => db.logDelivery(signalId, cid)));
+    // Log delivery
+    await Promise.all(deliveredIds.map(cid => db.logDelivery(signalId, cid)));
 
-  console.log(`[Signal] #${signalId} [${sp} ${first.action}] → ${deliveredIds.length} client(s)`);
-  return res.json({ signal_id: signalId, delivered_to: deliveredIds.length });
+    console.log(`[Signal] #${signalId} [${sp} ${first.action}] → ${deliveredIds.length} client(s)`);
+    return res.json({ signal_id: signalId, delivered_to: deliveredIds.length });
+  } catch (e) {
+    console.error("[Signal] DB error:", e.message);
+    return res.status(500).json({ detail: e.message });
+  }
 }
 app.get("/signal",  requireIngestKey, handleSignal);
 app.post("/signal", requireIngestKey, handleSignal);
@@ -212,39 +217,51 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// GET /v1/licenses
-app.get("/v1/licenses", requireAdminKey, async (req, res) => {
-  const rows = await db.listLicenses();
-  res.json(rows);
-});
-
 // POST /v1/licenses  (also GET /v1/licenses/new?note=)
 app.post("/v1/licenses", requireAdminKey, async (req, res) => {
-  const { note } = req.body || {};
-  const key = await db.createLicense(note || null);
-  res.json({ license_key: key });
+  try {
+    const { note } = req.body || {};
+    const key = await db.createLicense(note || null);
+    res.json({ license_key: key });
+  } catch (e) { res.status(500).json({ detail: e.message }); }
 });
 app.get("/v1/licenses/new", requireAdminKey, async (req, res) => {
-  const note = req.query.note || null;
-  const key = await db.createLicense(note);
-  res.json({ license_key: key });
+  try {
+    const note = req.query.note || null;
+    const key = await db.createLicense(note);
+    res.json({ license_key: key });
+  } catch (e) { res.status(500).json({ detail: e.message }); }
 });
 
 // POST /v1/licenses/:key/revoke  (also GET)
 app.post("/v1/licenses/:key/revoke", requireAdminKey, async (req, res) => {
-  await db.revokeLicense(req.params.key);
-  res.json({ revoked: req.params.key });
+  try {
+    await db.revokeLicense(req.params.key);
+    res.json({ revoked: req.params.key });
+  } catch (e) { res.status(500).json({ detail: e.message }); }
 });
 app.get("/v1/licenses/:key/revoke", requireAdminKey, async (req, res) => {
-  await db.revokeLicense(req.params.key);
-  res.json({ revoked: req.params.key });
+  try {
+    await db.revokeLicense(req.params.key);
+    res.json({ revoked: req.params.key });
+  } catch (e) { res.status(500).json({ detail: e.message }); }
 });
 
 // GET /v1/signals
 app.get("/v1/signals", requireAdminKey, async (req, res) => {
-  const limit = parseInt(req.query.limit || "100");
-  const rows = await db.recentSignals(limit);
-  res.json(rows);
+  try {
+    const limit = parseInt(req.query.limit || "100");
+    const rows = await db.recentSignals(limit);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ detail: e.message }); }
+});
+
+// GET /v1/licenses
+app.get("/v1/licenses", requireAdminKey, async (req, res) => {
+  try {
+    const rows = await db.listLicenses();
+    res.json(rows);
+  } catch (e) { res.status(500).json({ detail: e.message }); }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────
@@ -256,3 +273,11 @@ server.listen(PORT, "0.0.0.0", () => {
 // Graceful shutdown
 process.on("SIGTERM", () => { server.close(); db.pool.end(); });
 process.on("SIGINT",  () => { server.close(); db.pool.end(); });
+
+// Prevent unhandled promise rejections from crashing the process
+process.on("unhandledRejection", (reason) => {
+  console.error("[Unhandled Rejection]", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[Uncaught Exception]", err);
+});
