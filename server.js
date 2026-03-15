@@ -126,9 +126,10 @@ function requireAdminKey(req, res, next) {
 
 // ── HTTP endpoints ────────────────────────────────────────────────────────
 
-// POST /activate
-app.post("/activate", async (req, res) => {
-  const { license_key, fingerprint } = req.body;
+// activate handler (shared)
+async function handleActivate(req, res) {
+  const license_key = req.query.license_key || req.body?.license_key;
+  const fingerprint  = req.query.fingerprint  || req.body?.fingerprint;
   if (!license_key || !fingerprint) {
     return res.status(400).json({ detail: "license_key and fingerprint are required." });
   }
@@ -141,11 +142,24 @@ app.post("/activate", async (req, res) => {
   } catch (err) {
     return res.status(err.status || 500).json({ detail: err.message || String(err) });
   }
-});
+}
+app.get("/activate",  handleActivate);
+app.post("/activate", handleActivate);
 
-// POST /signal  (called by poster.py / Telegram listener)
-app.post("/signal", requireIngestKey, async (req, res) => {
-  const { sp, formatted, signals } = req.body;
+// signal handler (shared)
+async function handleSignal(req, res) {
+  // Support data via base64 query param ?d= or normal body
+  let sp, formatted, signals;
+  if (req.query.d) {
+    try {
+      const decoded = JSON.parse(Buffer.from(req.query.d, "base64").toString("utf8"));
+      ({ sp, formatted, signals } = decoded);
+    } catch (e) {
+      return res.status(400).json({ detail: "Invalid base64 data param." });
+    }
+  } else {
+    ({ sp, formatted, signals } = req.body || {});
+  }
   if (!sp || !formatted || !Array.isArray(signals) || signals.length === 0) {
     return res.status(400).json({ detail: "sp, formatted and signals[] are required." });
   }
@@ -174,7 +188,9 @@ app.post("/signal", requireIngestKey, async (req, res) => {
 
   console.log(`[Signal] #${signalId} [${sp} ${first.action}] → ${deliveredIds.length} client(s)`);
   return res.json({ signal_id: signalId, delivered_to: deliveredIds.length });
-});
+}
+app.get("/signal",  requireIngestKey, handleSignal);
+app.post("/signal", requireIngestKey, handleSignal);
 
 // GET /health
 app.get("/health", (req, res) => {
@@ -192,15 +208,24 @@ app.get("/mgmt/licenses", requireAdminKey, async (req, res) => {
   res.json(rows);
 });
 
-// POST /mgmt/licenses
+// POST /mgmt/licenses  (also GET /mgmt/licenses/new?note=)
 app.post("/mgmt/licenses", requireAdminKey, async (req, res) => {
-  const { note } = req.body;
+  const { note } = req.body || {};
   const key = await db.createLicense(note || null);
   res.json({ license_key: key });
 });
+app.get("/mgmt/licenses/new", requireAdminKey, async (req, res) => {
+  const note = req.query.note || null;
+  const key = await db.createLicense(note);
+  res.json({ license_key: key });
+});
 
-// POST /mgmt/licenses/:key/revoke
+// POST /mgmt/licenses/:key/revoke  (also GET)
 app.post("/mgmt/licenses/:key/revoke", requireAdminKey, async (req, res) => {
+  await db.revokeLicense(req.params.key);
+  res.json({ revoked: req.params.key });
+});
+app.get("/mgmt/licenses/:key/revoke", requireAdminKey, async (req, res) => {
   await db.revokeLicense(req.params.key);
   res.json({ revoked: req.params.key });
 });
