@@ -184,27 +184,27 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// GET /admin/licenses
-app.get("/admin/licenses", requireAdminKey, async (req, res) => {
+// GET /mgmt/licenses
+app.get("/mgmt/licenses", requireAdminKey, async (req, res) => {
   const rows = await db.listLicenses();
   res.json(rows);
 });
 
-// POST /admin/licenses
-app.post("/admin/licenses", requireAdminKey, async (req, res) => {
+// POST /mgmt/licenses
+app.post("/mgmt/licenses", requireAdminKey, async (req, res) => {
   const { note } = req.body;
   const key = await db.createLicense(note || null);
   res.json({ license_key: key });
 });
 
-// POST /admin/licenses/:key/revoke
-app.post("/admin/licenses/:key/revoke", requireAdminKey, async (req, res) => {
+// POST /mgmt/licenses/:key/revoke
+app.post("/mgmt/licenses/:key/revoke", requireAdminKey, async (req, res) => {
   await db.revokeLicense(req.params.key);
   res.json({ revoked: req.params.key });
 });
 
-// GET /admin/signals
-app.get("/admin/signals", requireAdminKey, async (req, res) => {
+// GET /mgmt/signals
+app.get("/mgmt/signals", requireAdminKey, async (req, res) => {
   const limit = parseInt(req.query.limit || "100");
   const rows = await db.recentSignals(limit);
   res.json(rows);
