@@ -1,7 +1,0 @@
-<IfModule mod_security2.c>
-    SecRuleEngine Off
-</IfModule>
-
-<IfModule LiteSpeed>
-    SecFilterEngine Off
-</IfModule>

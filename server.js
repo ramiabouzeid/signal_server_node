@@ -108,27 +108,17 @@ wss.on("connection", (ws, req) => {
 
 // ── Middleware helpers ────────────────────────────────────────────────────
 
-// Parse a single cookie value by name (no extra dependency needed)
-function getCookie(req, name) {
-  const header = req.headers.cookie || "";
-  const match = header.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-// Key can come from: Cookie k=..., query ?k=..., or body ._key
-function extractKey(req) {
-  return getCookie(req, "k") || req.query.k || req.body?._key || null;
-}
-
 function requireIngestKey(req, res, next) {
-  if (extractKey(req) !== INGEST_SECRET) {
+  const key = req.headers["x-ingest-key"];
+  if (key !== INGEST_SECRET) {
     return res.status(401).json({ detail: "Invalid ingest key." });
   }
   next();
 }
 
 function requireAdminKey(req, res, next) {
-  if (extractKey(req) !== ADMIN_KEY) {
+  const key = req.headers["x-admin-key"];
+  if (key !== ADMIN_KEY) {
     return res.status(401).json({ detail: "Invalid admin key." });
   }
   next();
@@ -136,10 +126,9 @@ function requireAdminKey(req, res, next) {
 
 // ── HTTP endpoints ────────────────────────────────────────────────────────
 
-// activate handler (shared)
-async function handleActivate(req, res) {
-  const license_key = req.query.license_key || req.body?.license_key;
-  const fingerprint  = req.query.fingerprint  || req.body?.fingerprint;
+// POST /activate
+app.post("/activate", async (req, res) => {
+  const { license_key, fingerprint } = req.body;
   if (!license_key || !fingerprint) {
     return res.status(400).json({ detail: "license_key and fingerprint are required." });
   }
@@ -152,24 +141,11 @@ async function handleActivate(req, res) {
   } catch (err) {
     return res.status(err.status || 500).json({ detail: err.message || String(err) });
   }
-}
-app.get("/activate",  handleActivate);
-app.post("/activate", handleActivate);
+});
 
-// signal handler (shared)
-async function handleSignal(req, res) {
-  // Support data via base64 query param ?d= or normal body
-  let sp, formatted, signals;
-  if (req.query.d) {
-    try {
-      const decoded = JSON.parse(Buffer.from(req.query.d, "base64").toString("utf8"));
-      ({ sp, formatted, signals } = decoded);
-    } catch (e) {
-      return res.status(400).json({ detail: "Invalid base64 data param." });
-    }
-  } else {
-    ({ sp, formatted, signals } = req.body || {});
-  }
+// POST /signal  (called by poster.py / Telegram listener)
+app.post("/signal", requireIngestKey, async (req, res) => {
+  const { sp, formatted, signals } = req.body;
   if (!sp || !formatted || !Array.isArray(signals) || signals.length === 0) {
     return res.status(400).json({ detail: "sp, formatted and signals[] are required." });
   }
@@ -194,7 +170,6 @@ async function handleSignal(req, res) {
     const payload = { sp, formatted, signals, signal_id: signalId };
     const deliveredIds = broadcast(payload);
 
-    // Log delivery
     await Promise.all(deliveredIds.map(cid => db.logDelivery(signalId, cid)));
 
     console.log(`[Signal] #${signalId} [${sp} ${first.action}] → ${deliveredIds.length} client(s)`);
@@ -203,9 +178,7 @@ async function handleSignal(req, res) {
     console.error("[Signal] DB error:", e.message);
     return res.status(500).json({ detail: e.message });
   }
-}
-app.get("/signal",  requireIngestKey, handleSignal);
-app.post("/signal", requireIngestKey, handleSignal);
+});
 
 // GET /health
 app.get("/health", (req, res) => {
@@ -217,49 +190,36 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// POST /v1/licenses  (also GET /v1/licenses/new?note=)
-app.post("/v1/licenses", requireAdminKey, async (req, res) => {
+// GET /mgmt/licenses
+app.get("/mgmt/licenses", requireAdminKey, async (req, res) => {
   try {
-    const { note } = req.body || {};
-    const key = await db.createLicense(note || null);
-    res.json({ license_key: key });
-  } catch (e) { res.status(500).json({ detail: e.message }); }
-});
-app.get("/v1/licenses/new", requireAdminKey, async (req, res) => {
-  try {
-    const note = req.query.note || null;
-    const key = await db.createLicense(note);
-    res.json({ license_key: key });
-  } catch (e) { res.status(500).json({ detail: e.message }); }
-});
-
-// POST /v1/licenses/:key/revoke  (also GET)
-app.post("/v1/licenses/:key/revoke", requireAdminKey, async (req, res) => {
-  try {
-    await db.revokeLicense(req.params.key);
-    res.json({ revoked: req.params.key });
-  } catch (e) { res.status(500).json({ detail: e.message }); }
-});
-app.get("/v1/licenses/:key/revoke", requireAdminKey, async (req, res) => {
-  try {
-    await db.revokeLicense(req.params.key);
-    res.json({ revoked: req.params.key });
-  } catch (e) { res.status(500).json({ detail: e.message }); }
-});
-
-// GET /v1/signals
-app.get("/v1/signals", requireAdminKey, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit || "100");
-    const rows = await db.recentSignals(limit);
+    const rows = await db.listLicenses();
     res.json(rows);
   } catch (e) { res.status(500).json({ detail: e.message }); }
 });
 
-// GET /v1/licenses
-app.get("/v1/licenses", requireAdminKey, async (req, res) => {
+// POST /mgmt/licenses
+app.post("/mgmt/licenses", requireAdminKey, async (req, res) => {
   try {
-    const rows = await db.listLicenses();
+    const { note } = req.body;
+    const key = await db.createLicense(note || null);
+    res.json({ license_key: key });
+  } catch (e) { res.status(500).json({ detail: e.message }); }
+});
+
+// POST /mgmt/licenses/:key/revoke
+app.post("/mgmt/licenses/:key/revoke", requireAdminKey, async (req, res) => {
+  try {
+    await db.revokeLicense(req.params.key);
+    res.json({ revoked: req.params.key });
+  } catch (e) { res.status(500).json({ detail: e.message }); }
+});
+
+// GET /mgmt/signals
+app.get("/mgmt/signals", requireAdminKey, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || "100");
+    const rows = await db.recentSignals(limit);
     res.json(rows);
   } catch (e) { res.status(500).json({ detail: e.message }); }
 });
