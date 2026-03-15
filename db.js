@@ -4,9 +4,7 @@ require("dotenv").config();
 const mysql = require("mysql2/promise");
 const crypto = require("crypto");
 
-const pool = mysql.createPool({
-  host:               process.env.DB_HOST     || "127.0.0.1",
-  port:               parseInt(process.env.DB_PORT || "3306"),
+const poolConfig = {
   user:               process.env.DB_USER     || "signaluser",
   password:           process.env.DB_PASS     || "changeme",
   database:           process.env.DB_NAME     || "signaldb",
@@ -14,7 +12,18 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit:    10,
   queueLimit:         0,
-});
+};
+
+// On Hostinger shared hosting MySQL listens on a Unix socket, not TCP.
+// Set DB_SOCKET=/path/to/mysql.sock in env to use socket, otherwise TCP.
+if (process.env.DB_SOCKET) {
+  poolConfig.socketPath = process.env.DB_SOCKET;
+} else {
+  poolConfig.host = process.env.DB_HOST || "localhost";
+  poolConfig.port = parseInt(process.env.DB_PORT || "3306");
+}
+
+const pool = mysql.createPool(poolConfig);
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
