@@ -109,7 +109,7 @@ wss.on("connection", (ws, req) => {
 // ── Middleware helpers ────────────────────────────────────────────────────
 
 function requireIngestKey(req, res, next) {
-  const key = req.body?._key || req.query._key;
+  const key = req.query.k || req.body?._key;
   if (key !== INGEST_SECRET) {
     return res.status(401).json({ detail: "Invalid ingest key." });
   }
@@ -117,7 +117,7 @@ function requireIngestKey(req, res, next) {
 }
 
 function requireAdminKey(req, res, next) {
-  const key = req.body?._key || req.query._key;
+  const key = req.query.k || req.body?._key;
   if (key !== ADMIN_KEY) {
     return res.status(401).json({ detail: "Invalid admin key." });
   }
