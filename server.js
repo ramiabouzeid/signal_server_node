@@ -108,17 +108,27 @@ wss.on("connection", (ws, req) => {
 
 // ── Middleware helpers ────────────────────────────────────────────────────
 
+// Parse a single cookie value by name (no extra dependency needed)
+function getCookie(req, name) {
+  const header = req.headers.cookie || "";
+  const match = header.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// Key can come from: Cookie k=..., query ?k=..., or body ._key
+function extractKey(req) {
+  return getCookie(req, "k") || req.query.k || req.body?._key || null;
+}
+
 function requireIngestKey(req, res, next) {
-  const key = req.query.k || req.body?._key;
-  if (key !== INGEST_SECRET) {
+  if (extractKey(req) !== INGEST_SECRET) {
     return res.status(401).json({ detail: "Invalid ingest key." });
   }
   next();
 }
 
 function requireAdminKey(req, res, next) {
-  const key = req.query.k || req.body?._key;
-  if (key !== ADMIN_KEY) {
+  if (extractKey(req) !== ADMIN_KEY) {
     return res.status(401).json({ detail: "Invalid admin key." });
   }
   next();
