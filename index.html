@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Signal Server</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 40px 48px;
+      text-align: center;
+      max-width: 420px;
+      width: 100%;
+    }
+    .dot {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #888;
+      margin-right: 8px;
+      vertical-align: middle;
+      transition: background 0.3s;
+    }
+    .dot.online  { background: #22c55e; box-shadow: 0 0 8px #22c55e88; }
+    .dot.offline { background: #ef4444; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 8px; }
+    p  { color: #94a3b8; font-size: 0.9rem; margin-bottom: 24px; }
+    .stat { margin: 8px 0; font-size: 0.95rem; }
+    .stat span { color: #7dd3fc; font-weight: 600; }
+    #status-line { font-size: 1rem; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>⚡ Signal Server</h1>
+    <p>Real-time trading signal distribution</p>
+    <div id="status-line">
+      <span class="dot" id="dot"></span>
+      <span id="status-text">Checking...</span>
+    </div>
+    <br/>
+    <div class="stat">Connected clients: <span id="clients">—</span></div>
+  </div>
+
+  <script>
+    async function check() {
+      try {
+        const res  = await fetch("/health");
+        const data = await res.json();
+        document.getElementById("dot").className        = "dot online";
+        document.getElementById("status-text").textContent = "Online";
+        document.getElementById("clients").textContent  = data.connected_clients;
+      } catch {
+        document.getElementById("dot").className        = "dot offline";
+        document.getElementById("status-text").textContent = "Offline";
+        document.getElementById("clients").textContent  = "—";
+      }
+    }
+    check();
+    setInterval(check, 5000);
+  </script>
+</body>
+</html>

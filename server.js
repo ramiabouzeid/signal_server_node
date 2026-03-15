@@ -3,6 +3,7 @@
 require("dotenv").config();
 
 const http    = require("http");
+const path    = require("path");
 const express = require("express");
 const { WebSocketServer } = require("ws");
 const db   = require("./db");
@@ -176,6 +177,11 @@ app.post("/signal", requireIngestKey, async (req, res) => {
 // GET /health
 app.get("/health", (req, res) => {
   res.json({ status: "ok", connected_clients: connections.size });
+});
+
+// GET / — status page
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 // GET /admin/licenses
