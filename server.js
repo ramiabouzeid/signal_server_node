@@ -109,14 +109,16 @@ wss.on("connection", (ws, req) => {
 // ── Middleware helpers ────────────────────────────────────────────────────
 
 function requireIngestKey(req, res, next) {
-  if (req.headers["x-api-ingest"] !== INGEST_SECRET) {
+  const key = req.body?._key || req.query._key;
+  if (key !== INGEST_SECRET) {
     return res.status(401).json({ detail: "Invalid ingest key." });
   }
   next();
 }
 
 function requireAdminKey(req, res, next) {
-  if (req.headers["x-api-token"] !== ADMIN_KEY) {
+  const key = req.body?._key || req.query._key;
+  if (key !== ADMIN_KEY) {
     return res.status(401).json({ detail: "Invalid admin key." });
   }
   next();
